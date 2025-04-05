@@ -3,169 +3,235 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>سیستم چت پیشرفته</title>
-  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <title>چت خصوصی</title>
   <style>
-    /* استایل‌های پیشرفته */
     body {
-      font-family: 'Tahoma', sans-serif;
-      background-color: #f8f9fa;
+      font-family: 'Vazir', Arial, sans-serif;
+      background-color: #f4f4f9;
       margin: 0;
       padding: 20px;
     }
-    .chat-container {
-      max-width: 800px;
+    .container {
+      max-width: 900px;
       margin: 0 auto;
       background: white;
-      border-radius: 15px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
-    .messages {
-      height: 60vh;
-      overflow-y: auto;
-      padding: 20px;
-    }
-    .message {
-      margin-bottom: 15px;
-      padding: 12px 20px;
-      border-radius: 20px;
-      max-width: 70%;
-      position: relative;
-    }
-    .message.self {
+    .header {
       background: #007bff;
       color: white;
-      margin-left: auto;
+      padding: 10px 20px;
+      text-align: center;
     }
-    .message.other {
-      background: #e9ecef;
-      margin-right: auto;
-    }
-    .input-area {
+    .token-section {
       padding: 20px;
-      display: flex;
-      gap: 10px;
-      border-top: 1px solid #eee;
+      border-bottom: 1px solid #ddd;
     }
-    input {
+    .chat-container {
+      display: flex;
+      height: 500px;
+    }
+    .private-list {
+      width: 30%;
+      border-left: 1px solid #ddd;
+      overflow-y: auto;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    .chat-box {
+      width: 70%;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+    .chat-messages {
       flex: 1;
-      padding: 12px 20px;
+      overflow-y: auto;
+      padding: 10px;
       border: 1px solid #ddd;
-      border-radius: 25px;
-      font-size: 16px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    .message {
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 5px;
+      max-width: 70%;
+    }
+    .sent { background: #007bff; color: white; align-self: flex-end; }
+    .received { background: #e9ecef; color: black; align-self: flex-start; }
+    .private-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .private-item:hover { background: #e9ecef; }
+    .private-item.active { background: #007bff; color: white; }
+    .private-avatar {
+      width: 40px;
+      height: 40px;
+      background: #007bff;
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 10px;
+      font-size: 14px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px 0;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      width: 100%;
     }
     button {
-      padding: 12px 30px;
-      background: #28a745;
+      background: #007bff;
       color: white;
       border: none;
-      border-radius: 25px;
       cursor: pointer;
-      transition: all 0.3s;
     }
-    button:hover {
-      background: #218838;
-      transform: translateY(-1px);
-    }
+    button:hover { background: #0056b3; }
+    .message-form { display: flex; gap: 10px; }
   </style>
 </head>
 <body>
-  <div class="chat-container">
-    <div class="messages" id="messages"></div>
-    <div class="input-area">
-      <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
-      <button onclick="sendMessage()">ارسال</button>
+  <div class="container">
+    <div class="header">
+      <h2>چت خصوصی</h2>
+    </div>
+    <div class="token-section">
+      <input type="text" id="tokenInput" placeholder="توکن احراز هویت رو وارد کن">
+      <button id="loginBtn">ورود</button>
+    </div>
+    <div class="chat-container">
+      <div class="private-list" id="privateList"></div>
+      <div class="chat-box">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="message-form">
+          <input type="text" id="messageContent" placeholder="پیام رو وارد کن">
+          <button id="sendBtn">ارسال</button>
+        </div>
+      </div>
     </div>
   </div>
 
+  <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
   <script>
-    let socket;
-    let currentUser;
+    let token = '';
+    let selectedUserId = null;
+    let currentUserId = null;
+    const socket = io('http://localhost:5000', { auth: { token: '' }, autoConnect: false });
 
-    // تنظیمات اولیه
-    document.addEventListener('DOMContentLoaded', async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        window.location.href = '/login';
-        return;
-      }
+    // Event Listeners
+    document.getElementById('loginBtn').addEventListener('click', setToken);
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
 
-      try {
-        const response = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!response.ok) throw new Error('احراز هویت ناموفق');
-        
-        currentUser = await response.json();
-        initSocket(token);
-        loadConversations();
-      } catch (error) {
-        console.error('خطا:', error);
-        window.location.href = '/login';
-      }
+    socket.on('connect', () => {
+      console.log('Socket connected:', socket.id);
+      const decodedToken = JSON.parse(atob(token.split('.')[1]));
+      currentUserId = decodedToken.userId;
+      console.log('Current user ID:', currentUserId);
     });
 
-    function initSocket(token) {
-      socket = io('http://localhost:5000', {
-        auth: { token },
-        transports: ['websocket']
-      });
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error.message);
+    });
 
-      socket.on('connect', () => {
-        console.log('اتصال به چت برقرار شد');
-      });
-
-      socket.on('new_message', handleNewMessage);
+    function setToken() {
+      token = document.getElementById('tokenInput').value;
+      socket.auth = { token };
+      socket.connect();
+      loadPrivateChats();
     }
 
-    function handleNewMessage(message) {
-      const isSelf = message.from._id === currentUser._id;
-      addMessageToUI(message, isSelf);
-    }
-
-    function addMessageToUI(message, isSelf) {
-      const messagesDiv = document.getElementById('messages');
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${isSelf ? 'self' : 'other'}`;
-      
-      messageDiv.innerHTML = `
-        <div class="message-content">${message.message}</div>
-        <div class="message-time">${new Date(message.createdAt).toLocaleTimeString('fa-IR')}</div>
-      `;
-
-      messagesDiv.appendChild(messageDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById('messageInput');
-      const message = input.value.trim();
-      
-      if (!message) return;
-
-      // ارسال پیام از طریق سوکت
-      socket.emit('private_message', {
-        to: 'RECIPIENT_ID', // باید شناسه گیرنده جایگزین شود
-        message
-      }, (response) => {
-        if (response.status === 'success') {
-          input.value = '';
-        }
-      });
-    }
-
-    async function loadConversations() {
+    async function loadPrivateChats() {
+      if (!token) {
+        console.log('No token provided');
+        return;
+      }
       try {
-        const response = await fetch('/api/chat/conversations', {
-          headers: { Authorization: `Bearer ${localStorage.token}` }
+        const response = await fetch('http://localhost:5000/api/chat/private', {
+          headers: { 'Authorization': `Bearer ${token}` },
         });
-        const data = await response.json();
-        console.log('مکالمات:', data);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const chats = await response.json();
+        console.log('Private chats:', chats);
+        const privateList = document.getElementById('privateList');
+        if (chats.length === 0) {
+          privateList.innerHTML = '<p>هیچ پیوی‌ای وجود نداره</p>';
+        } else {
+          privateList.innerHTML = chats.map(chat => `
+            <div class="private-item" data-userid="${chat.userId}" data-username="${chat.username}">
+              <div class="private-avatar">${chat.username[0]}</div>
+              <div>
+                <strong>${chat.username}</strong> (${chat.userId})<br>
+                ${chat.lastMessage} (${new Date(chat.createdAt).toLocaleTimeString()})
+              </div>
+            </div>
+          `).join('');
+          document.querySelectorAll('.private-item').forEach(item => {
+            item.addEventListener('click', () => {
+              const userId = item.getAttribute('data-userid');
+              const username = item.getAttribute('data-username');
+              selectChat(userId, username);
+            });
+          });
+        }
       } catch (error) {
-        console.error('خطا در دریافت مکالمات:', error);
+        console.error('خطا در بارگذاری پیوی‌ها:', error);
       }
     }
+
+    async function selectChat(userId, username) {
+      selectedUserId = userId;
+      document.querySelectorAll('.private-item').forEach(item => item.classList.remove('active'));
+      document.querySelector(`.private-item[data-userid="${userId}"]`).classList.add('active');
+      try {
+        const response = await fetch(`http://localhost:5000/api/chat/history/${userId}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const history = await response.json();
+        console.log('Chat history:', history);
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = history.map(msg => `
+          <div class="message ${msg.senderId === currentUserId ? 'sent' : 'received'}">
+            ${msg.content} (${new Date(msg.createdAt).toLocaleTimeString()})
+          </div>
+        `).join('');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      } catch (error) {
+        console.error('خطا در بارگذاری تاریخچه چت:', error);
+      }
+    }
+
+    function sendMessage() {
+      const content = document.getElementById('messageContent').value;
+      if (token && selectedUserId && content) {
+        socket.emit('sendMessage', { receiverId: selectedUserId, content });
+        document.getElementById('messageContent').value = '';
+      } else {
+        console.log('Missing token, selectedUserId, or content');
+      }
+    }
+
+    socket.on('receiveMessage', (message) => {
+      console.log('Received message:', message);
+      if (selectedUserId === message.senderId || selectedUserId === message.receiverId) {
+        selectChat(selectedUserId, document.querySelector('.private-item.active strong').textContent);
+      }
+      loadPrivateChats();
+    });
   </script>
 </body>
 </html>

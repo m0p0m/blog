@@ -34,3 +34,19 @@ export const getChatHistory = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error getting chat history', error });
   }
 };
+
+export const getPrivateChats = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+
+    const decoded = verifyToken(token);
+    const userId = decoded.userId;
+    console.log('Fetching private chats for user:', userId); 
+
+    const privateChats = await ChatService.getPrivateChats(userId);
+    res.status(200).json(privateChats);
+  } catch (error) {
+    res.status(500).json({ message: 'Error getting private chats', error });
+  }
+};

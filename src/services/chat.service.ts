@@ -19,6 +19,52 @@ class ChatService {
       ],
     }).sort({ createdAt: 1 });
   }
+
+  async getPrivateChats(userId: string) {
+    const messages = await Message.aggregate([
+      {
+        $match: {
+          $or: [{ senderId: userId }, { receiverId: userId }],
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ["$senderId", userId] },
+              "$receiverId",
+              "$senderId",
+            ],
+          },
+          lastMessage: { $first: "$$ROOT" },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $project: {
+          userId: "$_id",
+          username: "$user.username",
+          lastMessage: "$lastMessage.content",
+          createdAt: "$lastMessage.createdAt",
+        },
+      },
+    ]);
+    console.log('Private chats for user', userId, ':', messages); 
+    return messages;
+  }
 }
 
 export default new ChatService();
