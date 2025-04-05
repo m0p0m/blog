@@ -1,8 +1,10 @@
-import { Router } from "express";
-import ChatController from "../controllers/chat.controller";
+// routes/chat.routes.ts
+import { Router } from 'express';
+import { sendMessage, getChatHistory } from '../controllers/chat.controller';
 
 const router = Router();
 
-router.get("/:user1/:user2", ChatController.getMessages);
+router.post('/send', sendMessage);
+router.get('/history/:userId', getChatHistory);
 
 export default router;

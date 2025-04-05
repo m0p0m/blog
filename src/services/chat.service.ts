@@ -1,35 +1,24 @@
-import Message, { IMessage } from "../models/message.model";
+// services/chat.service.ts
+import Message from '../models/message.model';
 
 class ChatService {
-    async saveMessage(sender: string, receiver: string, content: string) {
-      const message = new Message({ sender, receiver, content });
-      return await message.save();
-    }
-  
-    async getMessages(user1: string, user2: string) {
-      return await Message.find({
-        $or: [
-          { sender: user1, receiver: user2 },
-          { sender: user2, receiver: user1 }
-        ]
-      }).sort({ createdAt: 1 });
-    }
-  
-    async getUserChats(userId: string) {
-      const messages = await Message.find({
-        $or: [{ sender: userId }, { receiver: userId }]
-      });
-  
-      const chatUsers = new Set<string>();
-      messages.forEach((msg) => {
-        chatUsers.add(msg.sender);
-        chatUsers.add(msg.receiver);
-      });
-  
-      chatUsers.delete(userId);
-      return Array.from(chatUsers);
-    }
+  async sendMessage(senderId: string, receiverId: string, content: string) {
+    const message = new Message({
+      senderId,
+      receiverId,
+      content,
+    });
+    return await message.save();
   }
 
-  
+  async getChatHistory(userId: string, otherUserId: string) {
+    return await Message.find({
+      $or: [
+        { senderId: userId, receiverId: otherUserId },
+        { senderId: otherUserId, receiverId: userId },
+      ],
+    }).sort({ createdAt: 1 });
+  }
+}
+
 export default new ChatService();

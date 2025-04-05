@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>سیستم چت پیشرفته</title>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    /* استایل‌های پیشرفته */
+    body {
+      font-family: 'Tahoma', sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 20px;
+    }
+    .chat-container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .messages {
+      height: 60vh;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .message {
+      margin-bottom: 15px;
+      padding: 12px 20px;
+      border-radius: 20px;
+      max-width: 70%;
+      position: relative;
+    }
+    .message.self {
+      background: #007bff;
+      color: white;
+      margin-left: auto;
+    }
+    .message.other {
+      background: #e9ecef;
+      margin-right: auto;
+    }
+    .input-area {
+      padding: 20px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid #eee;
+    }
+    input {
+      flex: 1;
+      padding: 12px 20px;
+      border: 1px solid #ddd;
+      border-radius: 25px;
+      font-size: 16px;
+    }
+    button {
+      padding: 12px 30px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #218838;
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <input type="text" id="messageInput" placeholder="پیام خود را بنویسید...">
+      <button onclick="sendMessage()">ارسال</button>
+    </div>
+  </div>
+
+  <script>
+    let socket;
+    let currentUser;
+
+    // تنظیمات اولیه
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error('احراز هویت ناموفق');
+        
+        currentUser = await response.json();
+        initSocket(token);
+        loadConversations();
+      } catch (error) {
+        console.error('خطا:', error);
+        window.location.href = '/login';
+      }
+    });
+
+    function initSocket(token) {
+      socket = io('http://localhost:5000', {
+        auth: { token },
+        transports: ['websocket']
+      });
+
+      socket.on('connect', () => {
+        console.log('اتصال به چت برقرار شد');
+      });
+
+      socket.on('new_message', handleNewMessage);
+    }
+
+    function handleNewMessage(message) {
+      const isSelf = message.from._id === currentUser._id;
+      addMessageToUI(message, isSelf);
+    }
+
+    function addMessageToUI(message, isSelf) {
+      const messagesDiv = document.getElementById('messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${isSelf ? 'self' : 'other'}`;
+      
+      messageDiv.innerHTML = `
+        <div class="message-content">${message.message}</div>
+        <div class="message-time">${new Date(message.createdAt).toLocaleTimeString('fa-IR')}</div>
+      `;
+
+      messagesDiv.appendChild(messageDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const message = input.value.trim();
+      
+      if (!message) return;
+
+      // ارسال پیام از طریق سوکت
+      socket.emit('private_message', {
+        to: 'RECIPIENT_ID', // باید شناسه گیرنده جایگزین شود
+        message
+      }, (response) => {
+        if (response.status === 'success') {
+          input.value = '';
+        }
+      });
+    }
+
+    async function loadConversations() {
+      try {
+        const response = await fetch('/api/chat/conversations', {
+          headers: { Authorization: `Bearer ${localStorage.token}` }
+        });
+        const data = await response.json();
+        console.log('مکالمات:', data);
+      } catch (error) {
+        console.error('خطا در دریافت مکالمات:', error);
+      }
+    }
+  </script>
+</body>
+</html>
